@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings,SettingsConfigDict
+from pydantic import SecretStr
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ClinicalTrialDoc-Insight"
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     #Groq LLM Setup
-    GROQ_API_KEY: str
+    GROQ_API_KEY: SecretStr
     GROQ_MODEL_NAME: str = "openai/gpt-oss-20b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
