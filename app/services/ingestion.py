@@ -125,5 +125,6 @@ class IngestionService:
             "total_chunks":total_chunks,
             "drug_name":drug_name,
             "trial_phase":trial_phase,
-            "status":"Indexed"
+            "status":"Indexed Successfully"
         }
+    

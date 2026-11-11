@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     CHUNK_SIZE:int = 700
     CHUNK_OVERLAP: int = 100
     SIMILARITY_SCORE_THRESOLD: float=0.25
-    TOP_K:int=5
+    TOP_K:int=8
 
     model_config=SettingsConfigDict(env_file=".env", extra="ignore")
 
