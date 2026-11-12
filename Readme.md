@@ -1,34 +1,43 @@
 # Clinical RAG Engine
 
-A FastAPI-based clinical document retrieval and question-answering service built for protocol PDFs and regulatory study material. The system ingests PDF pages, chunks them into searchable embeddings, and answers user queries with metadata-aware retrieval, citation support, and clinical-answer guardrails.
+A local clinical document RAG system that combines a FastAPI backend with a Streamlit dashboard for uploading PDFs, querying indexed protocols, and reviewing traceable citations.
 
-## What this project does
+## Overview
 
-This application is designed to help teams work with clinical trial documents by combining:
+This project ingests clinical PDFs, splits them into chunks, stores them in a persistent ChromaDB vector database, and answers questions using a Groq-backed LLM grounded in retrieved evidence.
 
-- PDF ingestion and text chunking
-- Vector search over clinical content using local embeddings
-- Automatic metadata extraction for drug names and trial phases
-- Retrieval with optional explicit filters
-- Retrieval-augmented answer generation from a Groq-backed LLM
-- Source-grounded citations with page references
+It is designed for workflows such as:
 
-It is useful for scenarios such as:
+- Reviewing uploaded clinical study documents
+- Searching protocol text by natural-language questions
+- Restricting queries to one document via filename
+- Checking the exact source document and page behind each answer
 
-- Querying trial protocols and study notes
-- Looking up adverse event reporting details
-- Filtering by drug and phase when multiple documents are indexed
-- Answering questions from indexed PDFs with traceable evidence
+## Application architecture
 
-## Key features
+The project has two main interfaces:
 
-- PDF upload endpoint for indexing clinical documents
-- ChromaDB-backed persistent vector storage
-- Sentence-transformers embeddings for local similarity search
-- Automatic extraction of clinical intent from natural language questions
-- Metadata filtering based on `drug_name` and `trial_phase`
-- Grounded responses with document and page citations
-- Fallback answer when there is insufficient evidence
+- Backend API: FastAPI app in `app/main.py`
+- Frontend UI: Streamlit app in `app/user_interface/ui.py`
+
+Together they provide:
+
+- PDF upload and document indexing
+- Vector retrieval with source filtering
+- Query answering with inline citations
+- Audit trail display in the UI
+- Document listing and deletion tools
+
+## Features
+
+- Upload PDFs for indexing
+- Chunk pages into searchable document segments
+- Persist chunks to ChromaDB
+- Use local embeddings (`sentence-transformers/all-MiniLM-L6-v2`)
+- Query with natural language
+- Filter retrieval by `source_file`
+- Return grounded answers with citations like `[Doc: filename.pdf, Page: 8]`
+- Provide a Streamlit dashboard for document management and clinical Q&A
 
 ## Project structure
 
@@ -39,37 +48,45 @@ clinical-rag-engine/
 │   ├── config.py
 │   ├── main.py
 │   ├── schemas.py
-│   └── services/
-│       ├── __init__.py
-│       ├── ingestion.py
-│       ├── rag_engine.py
-│       └── vector_store.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── ingestion.py
+│   │   ├── rag_engine.py
+│   │   └── vector_store.py
+│   └── user_interface/
+│       └── ui.py
 ├── data/
 │   └── chroma_db/
-├── .env
+├── tests/
+│   ├── __init__.py
+│   ├── test_ingestion.py
+│   └── test_rag.py
 ├── .gitignore
 ├── Readme.md
-└── requirments.txt
+├── requirments.txt
+└── .env
 ```
 
-## Technology stack
+## Tech stack
 
 - Python 3.11+
 - FastAPI
+- Streamlit
 - Pydantic + Pydantic Settings
-- ChromaDB
 - LangChain
-- Hugging Face sentence-transformers embeddings
-- Groq LLM API
+- ChromaDB
+- `sentence-transformers`
+- PyPDF
+- Groq API via OpenAI-compatible endpoint
 
 ## Prerequisites
 
-Before running the project, make sure you have:
+Before running the app, make sure you have:
 
-- Python installed
-- A virtual environment created for the project
+- Python 3.11+
+- A virtual environment for the project
 - A Groq API key
-- Access to the internet for model requests
+- Internet access for embeddings and model inference
 
 ## Setup
 
@@ -98,7 +115,7 @@ source venv/bin/activate
 pip install -r requirments.txt
 ```
 
-4. Create a `.env` file in the project root
+4. Create a `.env` file in the root directory:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
@@ -106,18 +123,41 @@ GROQ_MODEL_NAME=openai/gpt-oss-20b
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 ```
 
-## Running the app
+## Run the backend API
 
-Start the API with Uvicorn:
+Start the FastAPI server:
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API docs will be available at:
+Open the backend docs here:
 
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
+
+## Run the Streamlit UI
+
+Start the UI in a second terminal:
+
+```bash
+streamlit run app/user_interface/ui.py --server.port 8501
+```
+
+Then open:
+
+- Streamlit app: `http://localhost:8501`
+
+### UI features
+
+The UI includes:
+
+- System health panel for the backend and embedding model
+- PDF upload form for ingesting clinical documents
+- Document repository section with delete actions
+- Query input box for natural-language clinical questions
+- Optional document scope selector for searching one file or all files
+- Audit trail showing retrieved chunk count, active document scope, and verified citations
 
 ## API overview
 
@@ -127,9 +167,9 @@ The API docs will be available at:
 GET /api/v1/health
 ```
 
-Returns status information for the vector store and configured LLM model.
+Returns backend and vector store status.
 
-### Upload a clinical PDF
+### Upload a PDF
 
 ```http
 POST /api/v1/documents/upload
@@ -138,16 +178,12 @@ POST /api/v1/documents/upload
 Form fields:
 
 - `file`: PDF file
-- `drug_name` (optional): drug or compound name
-- `trial_phase` (optional): such as `Phase II` or `Phase III`
 
-Example using curl:
+Example:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/documents/upload" \
-  -F "file=@sample_protocol.pdf" \
-  -F "drug_name=Pembrolizumab" \
-  -F "trial_phase=Phase III"
+  -F "file=@sample_protocol.pdf"
 ```
 
 ### Query the indexed documents
@@ -156,54 +192,68 @@ curl -X POST "http://localhost:8000/api/v1/documents/upload" \
 POST /api/v1/query
 ```
 
-Request body example:
+Request body:
 
 ```json
 {
-  "question": "What adverse events were reported in Phase III trials of Pembrolizumab?",
+  "question": "What adverse events were reported in the document?",
   "filter_metadata": {
-    "drug_name": "Pembrolizumab",
-    "trial_phase": "Phase III"
+    "source_file": "sample_protocol.pdf"
   }
 }
 ```
 
-Response includes:
+Example response fields:
 
 - `answer`
 - `citations`
 - `chunks_retrieved`
 - `extracted_filter`
+- `active_filter`
 - `cleaned_query`
 
-## How retrieval works
+### List indexed documents
 
-1. A PDF is uploaded and split into chunks.
-2. Each chunk is enriched with metadata such as the original file name, page number, drug, and trial phase.
-3. The chunks are stored in ChromaDB with local embeddings.
-4. A user question is translated into a search query and optional metadata filter.
-5. Relevant chunks are retrieved by similarity search.
-6. The LLM produces an answer using only the retrieved context, with citations back to the source pages.
+```http
+GET /api/v1/documents
+```
 
-## Notes and guardrails
+### Delete a document
 
-The engine includes filtering and safety behavior intended for clinical use:
+```http
+DELETE /api/v1/documents/{filename}
+```
 
-- It attempts to extract drug and phase hints from the user question.
-- It can also accept explicit filters when users already know the target metadata.
-- It rejects unsupported or low-confidence results using a threshold guard.
-- When the evidence is weak or missing, it returns a conservative fallback message rather than guessing.
+## Retrieval flow
 
-## Example usage in Python
+1. A PDF is uploaded to the backend.
+2. The PDF is parsed page-by-page using PyPDF.
+3. Pages are chunked and enriched with metadata such as filename and page number.
+4. Chunks are stored in ChromaDB with embeddings.
+5. A question is sent to the backend from the UI or API.
+6. Similar chunks are retrieved using semantic search.
+7. The retrieved context is sent to the Groq model.
+8. The model returns a source-grounded answer with inline page citations.
+
+## Guardrails
+
+The engine is intentionally conservative:
+
+- It uses only the retrieved evidence
+- It avoids guessing beyond the context
+- It returns `Insufficient clinical documentation provided.` when evidence is weak or missing
+- It only includes verified citations that are actually present in its answer
+
+## Example Python usage
 
 ```python
 from app.services.rag_engine import RagEngine
-from app.schemas import DocumentMetadatafilter
 
 rag = RagEngine()
 
-answer, citations, count, active_filter, cleaned_query = rag.answer_query(
-    question="What are the key inclusion criteria for Phase II studies involving nivolumab?"
+answer, citations, chunk_count, active_filters, cleaned_query = rag.answer_query(
+    question="What are the key inclusion criteria described in the document?",
+    explicit_filter=None
 )
 
 print(answer)
@@ -211,6 +261,16 @@ for citation in citations:
     print(citation.source_file, citation.page)
 ```
 
-## Important project note
+## Testing
 
-The project currently relies on a local ChromaDB instance under `data/chroma_db` and a Groq-backed LLM for synthesis. For production use, you should review model access, security controls, and data handling requirements before exposing the API beyond a trusted environment.
+Run the project tests with:
+
+```bash
+pytest
+```
+
+## Notes
+
+- The vector store uses a local ChromaDB instance under `data/chroma_db`.
+- This project is best treated as a local clinical research prototype or internal tool, not a production clinical decision system.
+- Before exposing it beyond a trusted environment, review data handling, access control, and deployment security requirements.

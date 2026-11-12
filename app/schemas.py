@@ -1,26 +1,12 @@
 # app/schemas.py
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentMetadatafilter(BaseModel):
-    drug_name: Optional[str] = Field(default=None, description="Exact drug name filter")
-    trial_phase: Optional[str] = Field(default=None, description="e.g., Phase I, Phase II, Phase III, Phase IV")
-
-
-class ExtractedQueryIntent(BaseModel):
-    """Structured output schema for LLM query intent extraction."""
-    cleaned_query: str = Field(
-        ...,
-        description="The semantic core clinical question with specific entity constraints (e.g. drug name, phase) removed."
-    )
-    drug_name: Optional[str] = Field(
+    source_file: Optional[str] = Field(
         default=None,
-        description="The identified pharmaceutical/drug name (e.g., 'Pembrolizumab') normalized to Title Case, or null if none."
-    )
-    trial_phase: Optional[str] = Field(
-        default=None,
-        description="Standardized trial phase: strictly 'Phase I', 'Phase II', 'Phase III', 'Phase IV', or null if none."
+        description="Optional filename to scope retrieval to a single indexed PDF."
     )
 
 
@@ -28,30 +14,35 @@ class QueryRequest(BaseModel):
     question: str = Field(..., min_length=3, description="Natural language clinical question")
     filter_metadata: Optional[DocumentMetadatafilter] = Field(
         default=None,
-        description="Optional explicit metadata override. If omitted, extracted automatically from question."
+        description="Optional filename to scope retrieval to a single indexed PDF."
     )
 
 
 class Citation(BaseModel):
     source_file: str
     page: int
-    drug_name: Optional[str] = None
-    trial_phase: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
     answer: str
     citations: List[Citation]
     chunks_retrieved: int
-    extracted_filter: Optional[DocumentMetadatafilter] = None
+    extracted_filter: List[Dict[str, str]] = Field(default_factory=list)
+    active_filter: Optional[List[Dict[str, str]]] = None
     cleaned_query: str
+
+    @model_validator(mode="after")
+    def sync_filters(self):
+        if self.active_filter is None:
+            self.active_filter = self.extracted_filter
+        elif not self.extracted_filter and self.active_filter:
+            self.extracted_filter = self.active_filter
+        return self
 
 
 class UploadResponse(BaseModel):
     filename: str
     total_chunks: int
-    drug_name: Optional[str]
-    trial_phase: Optional[str]
     status: str = "Ingested successfully"
 
 

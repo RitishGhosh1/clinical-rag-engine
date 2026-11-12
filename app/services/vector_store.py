@@ -50,22 +50,20 @@ class VectorStoreManager:
         return self.collection.count()
 
     def list_unique_documents(self) -> List[Dict[str, Any]]:
-        result=self.collection.get(include=["metadatas"])
-        metadatas=result.get("metadatas",[])
-        docs_summary={}
+        result = self.collection.get(include=["metadatas"])
+        metadatas = result.get("metadatas", [])
+        docs_summary = {}
         for meta in metadatas:
-            src=meta.get("source_file")
+            src = meta.get("source_file")
             if not src:
                 continue
             if src not in docs_summary:
-                docs_summary[src]={
-                    "filename":src,
-                    "drug_name":meta.get("drug_name"),
-                    "trial_phase":meta.get("trial_phase"),
-                    "chunks_count":0
+                docs_summary[src] = {
+                    "filename": src,
+                    "chunks_count": 0
                 }
-            docs_summary[src]["chunks_count"]+=1
-        return list(docs_summary)
+            docs_summary[src]["chunks_count"] += 1
+        return list(docs_summary.values())
 
     def delete_document_by_filename(self, filename:str)->int:
         exisiting=self.collection.get(
