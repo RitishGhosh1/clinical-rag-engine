@@ -1,7 +1,7 @@
 #Sets up
 #Local CPU Embeddings: all-MiniLM-L6-v2 with normalize_embeddings=True (critical for accurate cosine space).
 #ChromaDB Client: Disk persistence in ./data/chroma_db configured with {"hnsw:space": "cosine"}.
-
+from typing import Any,List,Dict
 import chromadb
 from chromadb.config import Settings as ChromaClientSettings
 from langchain_chroma import Chroma
@@ -49,5 +49,33 @@ class VectorStoreManager:
     def count(self) -> int:
         return self.collection.count()
 
+    def list_unique_documents(self) -> List[Dict[str, Any]]:
+        result=self.collection.get(include=["metadatas"])
+        metadatas=result.get("metadatas",[])
+        docs_summary={}
+        for meta in metadatas:
+            src=meta.get("source_file")
+            if not src:
+                continue
+            if src not in docs_summary:
+                docs_summary[src]={
+                    "filename":src,
+                    "drug_name":meta.get("drug_name"),
+                    "trial_phase":meta.get("trial_phase"),
+                    "chunks_count":0
+                }
+            docs_summary[src]["chunks_count"]+=1
+        return list(docs_summary)
+
+    def delete_document_by_filename(self, filename:str)->int:
+        exisiting=self.collection.get(
+        where={"source_file":{"$eq":filename}}
+        )
+        count=len(exisiting.get("ids",[]))
+        if count == 0:
+            return 0
+        self.collection.delete(where={"source_file":{"$eq":filename}})
+        return count
+    
 def get_vector_store_manager() -> VectorStoreManager:
     return VectorStoreManager()

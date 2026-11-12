@@ -109,4 +109,23 @@ def post_query(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Inference execution failed: {str(e)}"
         )
-    
+
+@app.get(f"{api_prefix}/documents",tags=["list ingested documents"])
+def get_uploaded_documents():
+    return {"documents":vs_manager.list_unique_documents()}
+
+@app.delete(f"{api_prefix}/documents/{{filename}}",tags=["Deletion"])
+def delete_protocol_documents(filename:str):
+    deleted_chunks=vs_manager.delete_document_by_filename(filename)
+    if deleted_chunks == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{filename} not found in vector index! "
+        )
+    return {
+        "filename":filename,
+        "deleted_chunks":deleted_chunks,
+        "status":"Document successfully deleted from index! "
+    }
+
+
